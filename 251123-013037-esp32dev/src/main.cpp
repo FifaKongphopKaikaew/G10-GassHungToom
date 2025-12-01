@@ -7,7 +7,7 @@ const char *ssid = "test";           // ชื่อ WiFi ของคุณ
 const char *password = "pppppppp";   // รหัสผ่าน WiFi
 
 // ใส่ URL ของ Web App ที่ลงท้ายด้วย /exec (ห้ามใช้ /edit)
-#define GOOGLE_URL "https://script.google.com/macros/s/AKfycbyV3fV8IAc9in3kTmLOKC3hVmD9ebSi02nQi-Q92JXXbgyoTiFzfahCOOjFmMEqxUI/exec"
+#define GOOGLE_URL "https://script.google.com/macros/s/AKfycbwJCTiK5v6shzISv6MlgMHarXEZEzwcqpE2x3RygXNQJlvMEmx_4kMNKnus1l8OeaU/exec"
 
 // ประกาศฟังก์ชันจาก google.cpp เพื่อให้เรียกใช้ได้
 String post_google(String path, String body);

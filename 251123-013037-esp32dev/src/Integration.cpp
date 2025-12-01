@@ -66,6 +66,7 @@ void integration_setup() {
   scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
   scale.set_scale(calibration_factor);
   scale.tare();
+  Serial.println(__FILE__);
 
   // ตั้งค่า Motor
   pinMode(MOTOR_PIN, OUTPUT);
@@ -79,37 +80,49 @@ void integration_setup() {
 }
 
 void integration_loop() {
-  // วนลูปจนครบ 5 ครั้ง
-  while (total_count < 5) {
-    // รอให้กดปุ่ม A เพื่อเริ่มทำงาน
+// ⭐ วนลูปไม่จำกัดจำนวนครั้ง
+  while (true) {
+    
+    // รอกดปุ่ม A เพื่อเริ่มชั่ง
     if (waitForReady()) {
       fillWater();
     }
-  }
 
-  Serial.println("\n----------------------------------------");
-  Serial.print("  ครบ 5 ถังแล้ว (คันที่ "); Serial.print(vehicle_id); Serial.println(")");
-  Serial.println("  กด 'D' เพื่อส่งข้อมูลขึ้น Google Sheet");
-  Serial.println("----------------------------------------");
-  // แสดงผลลัพธ์ทั้งหมด
-  while (true) {
-    char key = keypad.getKey();
-    if (key == 'D') {
+    // ⭐ หลังชั่งเสร็จ ถามว่าจะเติมต่อหรือส่งข้อมูล
+    Serial.println("\n========================================");
+    Serial.println("  กด 'C' → เติมถังต่อไป");
+    Serial.println("  กด 'D' → ส่งข้อมูลไป Google Sheet");
+    Serial.println("========================================");
+
+    char choice = NO_KEY;
+    while (choice != 'C' && choice != 'D') {
+      choice = keypad.getKey();
+      delay(50);
+    }
+
+    // ตรวจสอบว่าเลือก C หรือ D
+    if (choice == 'C') {
+      Serial.println("\n>> เตรียมพร้อมสำหรับถังต่อไป...\n");
+      // กลับไปหัว loop เพื่อรอกด A อีกครั้ง
+      continue;
+    }
+
+    // ถ้ามาถึงตรงนี้ แปลว่า choice == 'D'
+    if (choice == 'D') {
       Serial.println(">> กำลังส่งข้อมูล...");
 
       float sumPTT = 0;
       float sumOther = 0;
 
-      // --- STEP 1: ส่งข้อมูลทีละแถว (5 ครั้ง) ---
-      for (int i = 0; i < 5; i++) {
+      // --- STEP 1: ส่งข้อมูลทีละแถว (ตามจำนวนที่เติมจริง) ---
+      for (int i = 0; i < tank_count; i++) {
         // คำนวณยอดรวมเตรียมไว้
         if (session_data[i].brand == "PTT") sumPTT += session_data[i].weight;
         else sumOther += session_data[i].weight;
 
         // รูปแบบส่ง: ROW;คันที่;ถังที่;เวลา;ยี่ห้อ;น้ำหนัก
-        // ตัวอย่าง: ROW;1;1;XX;PTT;50.00
-        String payload = "ROW;" + String(vehicle_id) + ";" + String(i + 1) + ";XX;" + session_data[i].brand + ";" + String(session_data[i].weight, 2);(session_data[i].weight, 2);
-        
+        String payload = "ROW;" + String(vehicle_id) + ";" + String(i + 1) + ";" + session_data[i].brand + ";" + String(session_data[i].weight, 2);
+
         Serial.print("Sending Tank "); Serial.println(i + 1);
         sendToGoogleFromMain(payload);
         delay(1500); // รอ 1.5 วิ ให้ Google บันทึกทัน
@@ -121,41 +134,35 @@ void integration_loop() {
       float netPrice = pricePTT + priceOther;
 
       // รูปแบบส่ง: SUM;SumPTT;PricePTT;SumOther;PriceOther;NetPrice
-      String sumPayload = "SUM;" + String(sumPTT, 2) + ";" + String(pricePTT, 2) + ";" + String(sumOther, 2) + ";" + String(priceOther, 2) + ";" + String(netPrice, 2);(priceOther, 2) + ";" + String(netPrice, 2);
-      
+      String sumPayload = "SUM;" + String(sumPTT, 2) + ";" + String(pricePTT, 2) + ";" + String(sumOther, 2) + ";" + String(priceOther, 2) + ";" + String(netPrice, 2);
+
       Serial.println("Sending Summary...");
       sendToGoogleFromMain(sumPayload);
-
       Serial.println(">> เสร็จสิ้น! พร้อมสำหรับคันต่อไป");
-      
+
       // รีเซ็ตค่าสำหรับคันถัดไป
       vehicle_id++;   // ขึ้นคันใหม่
       tank_count = 0; // เริ่มนับถัง 1 ใหม่
-      total_count = 0;   // ⭐ เพิ่มบรรทัดนี้ - รีเซ็ตตัวนับให้เริ่มใหม่
+      total_count = 0;   // รีเซ็ตตัวนับให้เริ่มใหม่
       count_PTT = 0;     // รีเซ็ตนับ PTT
       count_Other = 0;   // รีเซ็ตนับ Other
 
-      for (int i = 0; i < 5; i++) {
-          session_data[i].brand = "";
-          session_data[i].weight = 0.0;
-          session_data[i].timestamp = "";  // ล้างเวลาด้วย
-          data_PTT[i].before = 0;
-          data_PTT[i].after = 0;
-          data_PTT[i].difference = 0;
-          data_PTT[i].range = "";
-          data_Other[i].before = 0;
-          data_Other[i].after = 0;
-          data_Other[i].difference = 0;
-          data_Other[i].range = "";
+      // ล้างข้อมูลใน Array
+      for (int i = 0; i < 50; i++) {
+        session_data[i].brand = "";
+        session_data[i].weight = 0.0;
+        session_data[i].timestamp = "";
+        
+        data_PTT[i].before = 0; data_PTT[i].after = 0; data_PTT[i].difference = 0; data_PTT[i].range = "";
+        data_Other[i].before = 0; data_Other[i].after = 0; data_Other[i].difference = 0; data_Other[i].range = "";
       }
+
       Serial.println("\n========================================");
       Serial.print("   เริ่มต้นรถคันที่ "); Serial.println(vehicle_id);
       Serial.println("========================================\n");
+    } // จบ if choice == D
 
-      break;          // ออกจาก while เพื่อกลับไปเริ่มชั่งใหม่
-    }
-    delay(50);
-  }
+  } // จบ while(true)
 }
 
 bool waitForReady() {
